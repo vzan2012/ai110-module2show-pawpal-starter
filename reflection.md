@@ -77,11 +77,19 @@
 **b. Design changes**
 
 - Did your design change during implementation?
-  Yes, a change was made during the implementation in the **DailyPlan** class.
+  Yes, several refinements were identified during code skeleton review and implementation planning.
+  
 - If yes, describe at least one change and why you made it.
-  Removed the `getExplanation()` method and replaced it with a `description` attribute.
-
-  **Why**: During the design review, I realized that the explanation/description is generated once by the Scheduler when it creates the DailyPlan, and then remains static. Storing it as an attribute is simpler and more efficient than using a method.
+  **Change 1**: Removed the `getExplanation()` method and replaced it with a `description` attribute.
+  **Why**: The description is generated once by the Scheduler and remains static. Storing it as an attribute is simpler and more efficient than using a method.
+  
+  **Change 2 (Identified for future implementation)**: Code review revealed several features needed for production:
+  - **Task Status**: Tasks need states (PENDING, COMPLETED, SKIPPED) to track progress through the day.
+  - **Recurring Tasks**: "Morning walk" happens daily, but current model treats tasks as one-time only. Need `is_recurring` and `recurrence_pattern` fields.
+  - **Date Tracking**: DailyPlan should store what date the schedule is for to support multi-day planning.
+  - **Scheduler Scope**: Currently generates plan for one pet, but Owner has many. Should consider handling all pets simultaneously.
+  
+  **Decision**: These enhancements are identified but will be prioritized and added during implementation based on testing requirements.
 
 ---
 
