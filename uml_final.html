@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>PawPal+ UML – Final Architecture</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #f8f9fa;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem;
+    }
+    h1 { color: #333; margin-bottom: 0.25rem; }
+    p  { color: #666; margin-bottom: 2rem; font-size: 0.9rem; }
+    #diagram {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+      padding: 2rem;
+      max-width: 1100px;
+      width: 100%;
+    }
+    .save-hint {
+      margin-top: 1.5rem;
+      font-size: 0.85rem;
+      color: #888;
+    }
+  </style>
+</head>
+<body>
+  <h1>🐾 PawPal+ — Final System Architecture</h1>
+  <p>Generated from <code>pawpal_system.py</code> · Open in browser → Right-click diagram → Save image as <strong>uml_final.png</strong></p>
+
+  <div id="diagram">
+    <pre class="mermaid">
+classDiagram
+    direction TB
+
+    class Priority {
+        <<enumeration>>
+        LOW
+        MEDIUM
+        HIGH
+    }
+
+    class Species {
+        <<enumeration>>
+        DOG
+        CAT
+        OTHER
+    }
+
+    class TaskStatus {
+        <<enumeration>>
+        PENDING
+        COMPLETED
+        SKIPPED
+    }
+
+    class Frequency {
+        <<enumeration>>
+        ONCE
+        DAILY
+        WEEKLY
+    }
+
+    class Task {
+        +str task_name
+        +int duration_minutes
+        +Priority priority
+        +TaskStatus status
+        +Frequency frequency
+        +date due_date
+        +get_priority() Priority
+        +get_duration() int
+        +mark_completed() Task
+        +mark_skipped() None
+        +reset() None
+    }
+
+    class Pet {
+        +str pet_name
+        +Species species
+        +List~Task~ tasks
+        +add_task(task) None
+        +remove_task(task_name) None
+        +get_tasks_by_priority(priority) List~Task~
+        +get_all_tasks() List~Task~
+        +get_pending_tasks() List~Task~
+    }
+
+    class Owner {
+        +str owner_name
+        +float available_hours_per_day
+        +str preferences
+        +List~Pet~ pets
+        +add_pet(pet) None
+        +remove_pet(pet_name) None
+        +get_pets() List~Pet~
+        +get_all_tasks_from_all_pets() List~Task~
+        +get_pending_tasks_from_all_pets() List~Task~
+        +get_tasks_by_status(status) List~Task~
+        +get_tasks_by_pet(pet_name) List~Task~
+    }
+
+    class ScheduledTask {
+        +Task task
+        +str time_slot
+        +str reasoning
+        +get_task() Task
+        +get_time_slot() str
+        +get_reasoning() str
+    }
+
+    class DailyPlan {
+        +List~ScheduledTask~ scheduled_tasks
+        +float total_time_used
+        +str description
+        +get_schedule() List~ScheduledTask~
+        +add_scheduled_task(scheduled_task) None
+        +calculate_total_time() float
+    }
+
+    class Scheduler {
+        +dict PRIORITY_WEIGHTS
+        +generate_daily_plan(owner, pet, available_time) DailyPlan
+        +sort_by_time(scheduled_tasks) List~ScheduledTask~
+        +detect_conflicts(scheduled_tasks) List~str~
+        -_sort_tasks_by_priority(tasks) List~Task~
+        -_check_time_constraints(tasks, available_time) bool
+        -_fit_tasks_to_time(tasks, available_time) List~Task~
+        -_generate_reasoning(task) str
+        -_generate_plan_description(pet, plan, available_time) str
+        -_parse_time_slot(time_slot) tuple
+    }
+
+    Owner "1" *-- "0..*" Pet            : owns
+    Pet   "1" *-- "0..*" Task           : has
+    ScheduledTask "1" o-- "1" Task      : wraps
+    DailyPlan     "1" *-- "0..*" ScheduledTask : contains
+
+    Scheduler ..> DailyPlan     : creates
+    Scheduler ..> Owner         : reads
+    Scheduler ..> Pet           : reads
+    Scheduler ..> ScheduledTask : inspects
+
+    Task ..> Priority   : uses
+    Task ..> TaskStatus : uses
+    Task ..> Frequency  : uses
+    Pet  ..> Species    : uses
+    </pre>
+  </div>
+
+  <p class="save-hint">
+    To export as PNG: open this file in Chrome → wait for render →
+    right-click the diagram → <em>Save image as…</em> → name it <code>uml_final.png</code>
+  </p>
+
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default' });
+  </script>
+</body>
+</html>

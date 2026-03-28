@@ -5,9 +5,10 @@ Run with: python -m pytest tests/test_pawpal.py -v
 """
 
 import pytest
+from datetime import date, timedelta
 from pawpal_system import (
     Owner, Pet, Task, Scheduler, Priority, Species,
-    TaskStatus, DailyPlan, ScheduledTask
+    TaskStatus, Frequency, DailyPlan, ScheduledTask
 )
 
 
@@ -305,6 +306,210 @@ class TestIntegration:
         task.mark_completed()
         assert task not in pet.get_pending_tasks()
         assert task.status == TaskStatus.COMPLETED
+
+
+class TestSortByTime:
+    """Verify sort_by_time() returns ScheduledTasks in chronological order."""
+
+    def _make_scheduled_task(self, name: str, time_slot: str) -> ScheduledTask:
+        task = Task(name, 30, Priority.MEDIUM)
+        return ScheduledTask(task, time_slot, "test")
+
+    # --- Happy paths ---
+
+    def test_sort_out_of_order_tasks(self):
+        """Tasks given in random order should come back sorted earliest-first."""
+        scheduler = Scheduler()
+        tasks = [
+            self._make_scheduled_task("Lunch",     "12:00 - 12:30"),
+            self._make_scheduled_task("Walk",      "08:00 - 08:30"),
+            self._make_scheduled_task("Medication","10:00 - 10:15"),
+        ]
+        sorted_tasks = scheduler.sort_by_time(tasks)
+        time_slots = [st.get_time_slot() for st in sorted_tasks]
+        assert time_slots == ["08:00 - 08:30", "10:00 - 10:15", "12:00 - 12:30"]
+
+    def test_sort_already_ordered_tasks(self):
+        """Tasks already in order should remain unchanged."""
+        scheduler = Scheduler()
+        tasks = [
+            self._make_scheduled_task("Walk",  "08:00 - 08:30"),
+            self._make_scheduled_task("Lunch", "12:00 - 12:30"),
+        ]
+        sorted_tasks = scheduler.sort_by_time(tasks)
+        assert sorted_tasks[0].get_time_slot() == "08:00 - 08:30"
+        assert sorted_tasks[1].get_time_slot() == "12:00 - 12:30"
+
+    # --- Edge cases ---
+
+    def test_sort_single_task_unchanged(self):
+        """A list with one task should be returned as-is."""
+        scheduler = Scheduler()
+        tasks = [self._make_scheduled_task("Walk", "09:00 - 09:30")]
+        sorted_tasks = scheduler.sort_by_time(tasks)
+        assert len(sorted_tasks) == 1
+        assert sorted_tasks[0].get_time_slot() == "09:00 - 09:30"
+
+    def test_sort_empty_list(self):
+        """Empty input should return an empty list without errors."""
+        scheduler = Scheduler()
+        assert scheduler.sort_by_time([]) == []
+
+    def test_sort_does_not_mutate_original(self):
+        """sort_by_time() should return a new list, not modify the original."""
+        scheduler = Scheduler()
+        tasks = [
+            self._make_scheduled_task("Lunch", "12:00 - 12:30"),
+            self._make_scheduled_task("Walk",  "08:00 - 08:30"),
+        ]
+        original_order = [st.get_time_slot() for st in tasks]
+        scheduler.sort_by_time(tasks)
+        assert [st.get_time_slot() for st in tasks] == original_order
+
+
+class TestRecurrenceLogic:
+    """Verify mark_completed() produces the correct next-occurrence Task."""
+
+    # --- Happy paths ---
+
+    def test_daily_task_returns_next_day(self):
+        """Completing a DAILY task should return a new task due tomorrow."""
+        today = date.today()
+        task = Task("Medication", 10, Priority.HIGH,
+                    frequency=Frequency.DAILY, due_date=today)
+        next_task = task.mark_completed()
+
+        assert next_task is not None
+        assert next_task.due_date == today + timedelta(days=1)
+
+    def test_weekly_task_returns_next_week(self):
+        """Completing a WEEKLY task should return a new task due in 7 days."""
+        today = date.today()
+        task = Task("Vet visit", 60, Priority.HIGH,
+                    frequency=Frequency.WEEKLY, due_date=today)
+        next_task = task.mark_completed()
+
+        assert next_task is not None
+        assert next_task.due_date == today + timedelta(weeks=1)
+
+    def test_once_task_returns_none(self):
+        """Completing a ONCE task should return None — no recurrence."""
+        task = Task("Adoption paperwork", 30, Priority.MEDIUM,
+                    frequency=Frequency.ONCE)
+        next_task = task.mark_completed()
+
+        assert next_task is None
+
+    # --- Edge cases ---
+
+    def test_original_task_is_completed_after_mark(self):
+        """The original task must be COMPLETED, not the generated next task."""
+        today = date.today()
+        task = Task("Medication", 10, Priority.HIGH,
+                    frequency=Frequency.DAILY, due_date=today)
+        next_task = task.mark_completed()
+
+        assert task.status == TaskStatus.COMPLETED
+        assert next_task.status == TaskStatus.PENDING  # next task starts fresh
+
+    def test_next_task_inherits_name_and_priority(self):
+        """The generated next task should keep the same name, duration, and priority."""
+        today = date.today()
+        task = Task("Medication", 15, Priority.HIGH,
+                    frequency=Frequency.DAILY, due_date=today)
+        next_task = task.mark_completed()
+
+        assert next_task.task_name == "Medication"
+        assert next_task.duration_minutes == 15
+        assert next_task.priority == Priority.HIGH
+        assert next_task.frequency == Frequency.DAILY
+
+    def test_daily_task_with_no_due_date_falls_back_to_today(self):
+        """If due_date is None, the next occurrence should be based on today."""
+        task = Task("Walk", 20, Priority.MEDIUM, frequency=Frequency.DAILY)
+        next_task = task.mark_completed()
+
+        assert next_task is not None
+        assert next_task.due_date == date.today() + timedelta(days=1)
+
+
+class TestConflictDetection:
+    """Verify detect_conflicts() correctly identifies overlapping time slots."""
+
+    def _make_scheduled_task(self, name: str, time_slot: str) -> ScheduledTask:
+        task = Task(name, 30, Priority.MEDIUM)
+        return ScheduledTask(task, time_slot, "test")
+
+    # --- Happy paths ---
+
+    def test_no_conflict_sequential_tasks(self):
+        """Non-overlapping sequential tasks should produce no warnings."""
+        scheduler = Scheduler()
+        tasks = [
+            self._make_scheduled_task("Walk",  "08:00 - 08:30"),
+            self._make_scheduled_task("Eat",   "08:30 - 08:45"),
+            self._make_scheduled_task("Play",  "09:00 - 09:30"),
+        ]
+        warnings = scheduler.detect_conflicts(tasks)
+        assert warnings == []
+
+    # --- Edge cases ---
+
+    def test_identical_time_slots_flagged(self):
+        """Two tasks with the exact same time slot must be flagged as a conflict."""
+        scheduler = Scheduler()
+        tasks = [
+            self._make_scheduled_task("Walk", "08:00 - 08:30"),
+            self._make_scheduled_task("Eat",  "08:00 - 08:30"),
+        ]
+        warnings = scheduler.detect_conflicts(tasks)
+        assert len(warnings) == 1
+        assert "Walk" in warnings[0]
+        assert "Eat" in warnings[0]
+
+    def test_partial_overlap_flagged(self):
+        """Tasks that partially overlap should produce a conflict warning."""
+        scheduler = Scheduler()
+        tasks = [
+            self._make_scheduled_task("Walk", "08:00 - 08:45"),
+            self._make_scheduled_task("Eat",  "08:30 - 09:00"),
+        ]
+        warnings = scheduler.detect_conflicts(tasks)
+        assert len(warnings) == 1
+
+    def test_adjacent_tasks_not_flagged(self):
+        """A task ending exactly when the next begins is adjacent, not overlapping."""
+        scheduler = Scheduler()
+        tasks = [
+            self._make_scheduled_task("Walk", "08:00 - 08:30"),
+            self._make_scheduled_task("Eat",  "08:30 - 09:00"),
+        ]
+        # 08:30 == 08:30 → start_a < end_b (480 < 540) AND start_b < end_a (510 < 510) is FALSE
+        warnings = scheduler.detect_conflicts(tasks)
+        assert warnings == []
+
+    def test_empty_list_returns_no_warnings(self):
+        """An empty task list should return an empty warnings list."""
+        scheduler = Scheduler()
+        assert scheduler.detect_conflicts([]) == []
+
+    def test_single_task_returns_no_warnings(self):
+        """A single task cannot conflict with anything."""
+        scheduler = Scheduler()
+        tasks = [self._make_scheduled_task("Walk", "08:00 - 08:30")]
+        assert scheduler.detect_conflicts(tasks) == []
+
+    def test_multiple_conflicts_all_reported(self):
+        """If three tasks all overlap, all conflict pairs should be reported."""
+        scheduler = Scheduler()
+        tasks = [
+            self._make_scheduled_task("A", "08:00 - 09:00"),
+            self._make_scheduled_task("B", "08:15 - 08:45"),
+            self._make_scheduled_task("C", "08:30 - 09:30"),
+        ]
+        warnings = scheduler.detect_conflicts(tasks)
+        # A-B, A-C, and B-C all overlap → 3 warnings
+        assert len(warnings) == 3
 
 
 if __name__ == "__main__":
