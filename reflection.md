@@ -78,17 +78,16 @@
 
 - Did your design change during implementation?
   Yes, several refinements were identified during code skeleton review and implementation planning.
-  
 - If yes, describe at least one change and why you made it.
   **Change 1**: Removed the `getExplanation()` method and replaced it with a `description` attribute.
   **Why**: The description is generated once by the Scheduler and remains static. Storing it as an attribute is simpler and more efficient than using a method.
-  
+
   **Change 2 (Identified for future implementation)**: Code review revealed several features needed for production:
   - **Task Status**: Tasks need states (PENDING, COMPLETED, SKIPPED) to track progress through the day.
   - **Recurring Tasks**: "Morning walk" happens daily, but current model treats tasks as one-time only. Need `is_recurring` and `recurrence_pattern` fields.
   - **Date Tracking**: DailyPlan should store what date the schedule is for to support multi-day planning.
   - **Scheduler Scope**: Currently generates plan for one pet, but Owner has many. Should consider handling all pets simultaneously.
-  
+
   **Decision**: These enhancements are identified but will be prioritized and added during implementation based on testing requirements.
 
 ---
@@ -98,12 +97,20 @@
 **a. Constraints and priorities**
 
 - What constraints does your scheduler consider (for example: time, priority, preferences)?
+  I have created the Scheduler that considers these constraints - **time**, **priority levels** and **task status**.
+  -
+  - **priority levels** with _HIGH_, _MEDIUM_ and _LOW_ levels determine the order of tasks to be scheduled.
+  - **task status** - scheduling only Pending tasks.
+
 - How did you decide which constraints mattered most?
+  Time and priority are the most important ones and focused on it.
 
 **b. Tradeoffs**
 
 - Describe one tradeoff your scheduler makes.
+  I have used the `detect_conflicts()` method to check the task pair for overlaps but gets slower as the task increases.
 - Why is that tradeoff reasonable for this scenario?
+  It can able to handle few tasks per pet.
 
 ---
 
